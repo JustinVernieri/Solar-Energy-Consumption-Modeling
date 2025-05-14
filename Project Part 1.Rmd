@@ -1,0 +1,257 @@
+---
+title: "Project Part 1"
+author: "Justin Vernieri"
+date: "2025-04-01"
+output: html_document
+---
+```{r}
+library(fpp)
+library(fpp2)
+library(forecast)
+```
+
+### Time Series: U.S. Solar Energy Consumption from 1984-2024 (monthly data)
+#### Measured in Quadrillion British Thermal Units (BTUs)
+```{r} 
+# Importing the Excel CSV file for my data set - U.S. Solar Energy Consumption in Quadrillion British Thermal Units (BTUs)
+Solar_Energy_Consumption <- read.csv("C:\\Users\\justi\\OneDrive\\Documents\\Rutgers Junior\\Sem 2\\Time Series Modeling\\Solar Energy Consumption.csv")
+
+# Changing the Month column to the appropriate class (from character to date)
+Solar_Energy_Consumption$Month <- as.Date(Solar_Energy_Consumption$Month, format="%Y-%m-%d")
+
+# Original Data
+Solar_Energy_Consumption
+
+# Changing the original data from data frame to time series
+Solar_Energy_Consumption_ts <- ts(Solar_Energy_Consumption$Solar.Energy.Consumption, start=c(1984,1), frequency=12)
+Solar_Energy_Consumption_ts
+
+# Creating the appropriate window for significant data - from 2010 on
+Solar_Window_ts <- window(Solar_Energy_Consumption_ts, start=c(2010,1))
+
+# Original line graph for the data set
+# Based on the time series line graph, total solar energy consumption has increased over time from 2010 to the end of 2024. Over this time frame, it seems that there were seasonal fluctuations, meaning that solar energy consumption followed the same patter of dips and spikes.
+plot(Solar_Window_ts, col = "Black", xlab = "Time", ylab = "Consumption in Quadrillion BTUs", main = "Total Solar Energy Consumption Over Time")
+```
+
+### Examining Trend and Seasonality using Acf
+```{r}
+# Acf Plot
+# The Acf shows that there is a strong trend among the data set. The lines at each lag are all significant, suggesting that there is correlation. Also, the Acf plot exhibits seasonality, as indicted by the clear upticks in lag 12 and lag 24, corresponding to patterns for monthly data, which this data is.
+Acf(Solar_Window_ts)
+```
+
+### Different Simple Models and 2-year Forecasts (mean, naive, random walk, seasonal naive, moving averages) 
+```{r}
+# Mean forecast
+# While the most recent data point is about 0.0652 quadrillion BTUs, the mean forecast shows that solar energy consumption over the next two years will be 0.0332 quadrillion BTUs. There an 80% chance that the forecast will fall within -0.0026 and 0.0691 quadrillion BTUs and a 95% chance it will fall within -0.2179 and 0.0883 quadrillion BTUs. This means that the certainty of this forecast is quite off, which is because it assigns equal weight to all historical data from 2010 on. 
+mean_solar <- meanf(Solar_Window_ts, 24)
+plot(mean_solar, xlab="Time", ylab="Consumption in Quadrillion BTUs")
+accuracy(mean_solar) # Using MAPE (mean absolute percent error) as the accuracy measure, we see that the forecast using the mean is off by about 148.37%. This is a very strong indication not to use this forecast. 
+
+# Naive forecast
+# The naive forecast is a "no-change" forecast for the next two years. It serves as a good benchmark, with the forecast staying the same as the most recent data point of 0.0652 quadrillion BTUs. This forecast does not change, as indicated by the straight horizonatal blue line. 
+naive_solar <- naive(Solar_Window_ts, 24)
+plot(naive_solar, xlab="Time", ylab="Consumption in Quadrillion BTUs")
+accuracy(naive_solar) # The MAPE indicates that this forecast is off by about 11.67%. The root mean square error (RMSE) is about 0.00579, which means that the average difference between the predicted values and the actual values is about 0.00579 quadrillion BTUs. 
+
+# Random Walk forecast
+# This forecast is different from the naive method because it incorporates the average trend of past values and it includes drift. So, the random walk forecast shows that solar energy consumption in the U.S. will slightly increase over the next two years, as indicated by the upward straight blue line. 
+rwf_solar <- rwf(Solar_Window_ts, 24, drift=TRUE)
+plot(rwf_solar, xlab="Time", ylab="Consumption in Quadrillion BTUs")
+accuracy(rwf_solar) # The MAPE indicates that the random walk forecast is off by about 11.79%, slightly more than the naive forecast. 
+
+# Seasonal Naive forecast
+# Seasonal naive forecasts assume that seasonal patterns repeat will follow the same cycle from last season (month of the previous year). So, it will begin to increase at the start of 2025 and then peak mid-summer in the months of June and July, and then decrease after. The values over the next two years will be the same as those in 2024 (corresponding to the most recent cycle). 
+snaive_solar <- snaive(Solar_Window_ts,24)
+plot(snaive_solar, xlab="Time", ylab="Consumption in Quadrillion BTUs")
+accuracy(snaive_solar) # The MAPE indicates that this forecast is off by 17.79932%. 
+
+# Simple-Moving averages model
+# This moving averages model has a window size of 5 and only assigns equal weight on recent points within the window. It takes the average of those points in order to smooth out random fluctuations in the time series data. As the moving average order increases, the more smoothed the line. For example, the simple moving average of order 5 (red color line) is the most smoothed out of the two and has the least dramatic fluctuations. Also, increasing the order increases the distance from the simple moving average and the original time series. With a higher order, you get a line that has less noise due to smoothing but reacts slower to changes. In this case, the line with the higher order still has very noticeable fluctuations, which certifies that the data set is dominated by seasonality. 
+MA3_solar <- ma(Solar_Window_ts, order=3)
+MA5_solar <- ma(Solar_Window_ts, order=5)
+plot(Solar_Window_ts, main="Moving Averages Model", xlab="Time", ylab="Consumption in Quadrillion BTUs")
+lines(MA3_solar, col='blue')
+lines(MA5_solar, col='red')
+# Extra - Forecast from Moving Averages, Order 5 Model (done through ETS)
+plot(forecast(MA5_solar),h=24)
+accuracy(forecast(MA5_solar)) # The MAPE indicates that this model is off by 2.368026%, which is very good. 
+```
+
+### Exponential Smoothing using ETS (error, trend, seasonality)
+```{r}
+# Simple Smoothing using ETS (error, trend, seasonality)
+# The output supports the fact that solar energy consumption has been increasing steadily, as seen in the level component. The output also shows that a seasonal pattern dominates the data, as the magnitude of the seasonal component is quite large. Also, the slope component suggests that the slope is not constant and there are some random fluctuations in the rate of change of the level. For example, there is a noticeable dip in the rate of change of slope around 2022-2023. 
+ets_solar <- ets(Solar_Window_ts)
+plot(ets_solar)
+
+# ETS forecast
+# The forecast from the ETS method captures the seasonal effects, meaning that solar energy consumption will continue to rise and fall seasonally. The slight upward trend over recent years will be followed as well. It is important to note for this forecast that the shaded areas widen as the forecast extends longer into the future, showing increasing uncertainty of the forecast further into the future. 
+forecast_ets_solar <- forecast.ets(ets_solar,h=24)
+plot(forecast_ets_solar, xlab="Time", ylab="Consumption in Quadrillion BTUs")
+# The alpha value, or the smoothing factor, is 0.6418. The closer to 1 the alpha value, the more weight the model gives to recent predictions. The value of 0.6418 indicates that more than half of the weight is given to the most recent data. 
+# The initial state is 0.0048.  
+# The sigma value is 0.0489. Sigma represents the standard deviation of the residuals. The higher the sigma value, the higher the deviation of the forecasted values from the actual observed values. In this case, the sigma indicates that the typical standard deviation of the forecast from the actual values is about 0.0489 quadrillion BTUs.
+summary(forecast_ets_solar)
+accuracy(forecast_ets_solar) # The MAPE indicates that this forecast is off by about 3.527%  
+
+# Residual Analysis for Simple Smoothing using ETS
+ets_solar_residuals <- residuals(forecast_ets_solar)
+# Residual Plot from Simple Smoothing using ETS
+# The residuals plot for simple smoothing using ETS shows that the residuals fluctuated above and below 0 by no more than 0.15 quadrillion BTUs. The most notable fluctuations from 2010 to 2024 occurred around 2016 when there was a spike in the residual values as well as around 2020 when there was a dip and then a quick spike in the residual values. Based on this plot, the ETS model does not seem to be dominantly under-estimating or over-estimating. However, it can be said that from 2015 to 2020, the residual values were larger compared to the most historical values and the most recent ones. The reason for this may be that solar energy technology started to be used more and gain popularity after 2015, so it may have been more difficult to predict. Yet, in more recent years residuals from ETS have not been as great. Based on these results from ETS, businesses and the energy sector may have gained a better understanding of their efficiency and production, so better estimations are made. 
+plot(ets_solar_residuals, main="Residuals from Simple Smoothing (ETS method)")
+# Histogram of residuals from Simple Smoothing using ETS
+# This histogram plot shows that the residuals have a practically normal distribution. The bin with the most residuals is 0 to 0.05, with almost 80 observations. 
+hist(ets_solar_residuals, main="Histogram of Residuals from Simple Smoothing (ETS)")
+# Fitted values vs. Residuals for Simple Smoothing using ETS
+# This plot shows that most predicted valued have residuals fluctuating around 0, with almost all being no more than 0.15 quadrillion BTUs above or below 0. Most of the residuals are spread on the far left of the graph, meaning that the lowest predicted values for solar consumption usually have the greatest spread of residuals. Solar consumption estimations that are high typically do not have wide-ranging residuals, meaning that these estimations are closer to the actual values.
+plot(as.numeric(ets_solar$fitted), as.numeric(ets_solar_residuals), main="Fitted values vs. Residuals for Simple Smoothing (ETS)")
+# Actual values vs. Residuals for Simple Smoothing using ETS
+# This actual values vs. residuals plot for simple smoothing using ETS indicates very similar information to the fitted vs. residuals plot. The lowest actual values have the most spread out residuals, as seen on the far left of the plot. 
+plot(as.numeric(Solar_Window_ts), as.numeric(ets_solar_residuals), main="Actual values vs. Residuals for Simple Smoothing (ETS)")
+# Acf Plot for the residuals from Simple Smoothing using ETS
+# This Acf plot exhibits a wave-like/oscillating pattern of alternating negative and positive lags. However, only a handful of these lags are significant (i.e. lag 7, lag 10, lag 12, lag 13, lag 17, lag 24), meaning that the ETS model is doing partly well in reducing autocorrelation. Lags 12 and 24 have slight significant upticks still, which means that some seasonal effects may not have been accounted for by the ETS model. Also, the first few lags are not significant, which means that ETS has removed short-term auto correlations.
+Acf(ets_solar_residuals)
+```
+
+### Exponential Smoothing using Holt-Winters
+```{r}
+# Holt-Winters model
+# Holt-Winters is a forecast-ready model with smoothing applied. The level, trend, and seasonal components can be inspected. The Holt-Winters line follows closely the original time series data, with only small gaps in between the troughs and peaks for the most recent fluctuations. Holt-Winters is fitting well based on the filtering line graph. 
+HW_solar <- HoltWinters(Solar_Window_ts)
+plot(HW_solar, xlab="Time", ylab="Consumption in Quadrillion BTUs")
+
+# Holt-Winters Forecast
+# The Holt-Winters forecast predicts that solar energy consumption, for example, will be 0.13006810 quadrillion BTUs in May 2025. Like the ETS forecast, the Holt-Winters forecast appears to takes into account seasonal fluctuations as well as the slight upward trend that has existed since 2010.
+forecast_HW_solar <- forecast(HW_solar, h=24)
+plot(forecast_HW_solar, xlab="Time", ylab="Consumption in Quadrillion BTUs")
+# The alpha value (smoothing factor) is 0.08857873. The closer to 1 the alpha level, the more weight the model gives to recent observations. This value of 0.08857873 indicates that the data is highly reactive the most historical data, and it is not very reactive to the most recent data. 
+# The beta value is 0.5599959, which means that there is trend being estimated. Recent data influences trend more than the furthest past data. 
+# The gamma value is 1. This is the seasonality factor, which indicates that the seasonal component is entirely based on the most recent seasonal observations. Past seasonal patterns do not influence future forecasts for this model. 
+summary(forecast_HW_solar)
+accuracy(forecast_HW_solar) # The MAPE indicates that this forecast is off by about 6.239%. 
+
+# Residual Analysis for Holt-Winters
+# Residual Plot from Holt-Winters
+# The residuals from Holt-Winters do not exceed more than 0.10 quadrillion BTUs above or below 0, which is similar to the ETS residuals. However, there is a noticeable difference compared to residuals plot from simple smoothing by ETS. Ideally, residuals should behave like white noise and randomly fluctuate around zero, but there are clear patterns in this plot, particularly an increasing variance over time. From 2010 to 2015, the residuals remained very close to 0, and there weren't many fluctuations. The more recent data, from around 2018 onward, have residuals with much greater variation and great amplitude, which was the opposite with the residuals from ETS. This suggests that the Holt-Winters model may not be capturing all trends or seasonal variations in time series, especially compared to ETS (which is supported by the larger MAPE).
+plot(forecast_HW_solar$residuals, main="Residuals from Holt-Winters")
+# Histogram of Residuals for Holt-Winters
+# Like the histogram of residuals from ETS, the residuals from Holt-Winters also appears approximately symmetric around zero, but there is a slight skewness to the right. The peak of the distribution is near zero, which suggests that the Holt-Winters model does not systematically over- or under-predict the solar energy consumption values. The slight skewness could indicate that the Holt-Winters model is not fully capturing all patterns in the data. 
+hist(forecast_HW_solar$residuals, main="Histogram of Residuals from Holt-Winters")
+# Fitted values vs. Residuals from Holt-Winters
+# In this plot, there is some randomness, but there also seems to be a slight pattern, especially with higher fitted values showing greater spread in residuals. The spread of residuals increases as fitted values increase, which means that the Holt-Winters model struggles more with predicting larger values accurately, leading to higher variability in errors. 
+plot(as.numeric(forecast_HW_solar$fitted), as.numeric(forecast_HW_solar$residuals), main="Fitted Values vs. Residuals for Holt-Winters")
+# Actual values vs. Residuals from Holt-Winters
+# The actual values vs. residuals plot indicates practically the same information as the fitted vs. residuals plot from Holt-Winters.
+plot(as.numeric(forecast_HW_solar$x), as.numeric(forecast_HW_solar$residuals), main="Actual Values vs. Residuals for Holt-Winters")
+# Acf Plot for the residuals from Holt-Winters
+# The alternating positive and negative correlations in this Acf plot every 12 lags suggests that the Holt-Winters model may not be fully capturing seasonality. Also, lags 1-3 show significant positive autocorrelation, suggesting that short-term dependencies exist. Holt-Winters should generally remove short-term autocorrelation, so this could indicate that the model is not capturing all trends and patterns well for this time series. ETS seems to be producing better residuals than Holt-Winters because the lags for Holt-Winters are still mostly significant and ETS has handled short-term dependencies better.
+Acf(forecast_HW_solar$residuals)
+```
+
+### Decomposition
+```{r}
+# Seasonal and Trend Decomposition using Loess - stl function
+# Based on the decomposition, the time series is seasonal, as indicated by the seasonal component of the output. The seasonality fluctuates in a wave-like pattern from about -0.010 to 0.005 above and below zero. This means that seasonality accounts for about 0.010 quadrillion BTUs less and about 0.005 quadrillion BTUs more in solar energy consumption in the United States. The stl decomposition output also shows that there is an upward trend in the time series from 2010 to present day. The remainder component has values quite close to 0, but there is still clear pattern, which suggests that this model is leaving behind some structure of the trend or seasonality. 
+stl_decomp_solar <- stl(Solar_Window_ts, s.window="periodic")
+plot(stl_decomp_solar)
+
+# Seasonally adjusted decomposition model from stl function
+# The line graph for the seasonally-adjusted decomposition mode from Loess (stl) appears peculiar. From 2010 to around 2018, the seasonally-adjusted line has notable fluctuations even though the original time series data has the least fluctuations at this time. The seasonally-adjusted line also shows minimal fluctuation from 2018 to around 2020, despite the original time series beginning to have larger fluctuations during this time. This may mean that the decomposition model is not correctly accounting for seasonality of the time series.
+plot(Solar_Window_ts, xlab="Time", ylab="Consumption in Quadrillion BTUs", main="Seasonally-Adjusted Model from Loess Decomposition")
+lines(seasadj(stl_decomp_solar), col="red")
+
+# Forecast from decomposition using Loess - stl function
+# The forecast shows that the wave-like patterns of solar energy will not be as extreme and of similar amplitude compared to the most recent years. For this this forecast, there seems to be great uncertainty, as the shaded areas around the forecast line are quite large compared to other models. 
+f_stl_solar <- forecast(stl_decomp_solar,h=24)
+plot(f_stl_solar, xlab="Time", ylab="Consumption in Quadrillion BTUs")
+accuracy(f_stl_solar) # The MAPE indicates that this forecast is off by about 18.243%, which is not a strong indicator to use this model.  
+
+# Classical decomposition method using decompose function
+# Decomposition using the decompose function shows that the decomposition is additive. Like the stl decomposition method, there is a strong upward trend and strong seasonal patterns with this time series data. However, the random component shows a structure and pattern, which means that trend may be misspecified, seasonality may not correctly accounted for, or there is a non-seasonal cyclic component. 
+decompose_solar <- decompose(Solar_Window_ts)
+plot(decompose_solar)
+# The values of the seasonal monthly indices (in order from Jan to Dec) are: -0.0109583125 -0.0081853869 -0.0001873988  0.0043373839  0.0088626339  0.0099145595  0.0085446220  0.0066817202  0.0024615446 -0.0015223839 -0.0083143452 -0.0116346369
+# May, June, and July are the three months with the highest seasonal indices, while December and January have the lowest indices. It makes sense for these months have those corresponding seasonal indices because solar energy production, and thus consumption, would be highest in the summer months when UV-rays are most profound, and it would be lowest in the winter months when it is cloudier, darker, and UV rays are not as strong.
+decompose_solar$figure
+
+# Seasonally adjusted model from decompose function
+# The line for the seasonally-adjusted model from classical decomposition is very similar to the seasonally-adjusted model from the Loess method. From 2010 to around 2018, the seasonally-adjusted line has profound fluctuations despite the original time series having the least fluctuations during this time. This means that this decomposition model is significantly over and under-estimating solar energy consumption within this time frame. After 2018, this decomposition model begins to primarily under-estimate solar energy consumption, as indicated by the gaps between the two lines.
+plot(Solar_Window_ts, xlab="Time", ylab="Consumption in Quadrillion BTUs", main="Seasonally-Adjusted Model from Classical Decomposition")
+lines(seasadj(decompose_solar), col="blue")
+```
+
+### Time Series and Forecasts on Single Plot
+```{r}
+plot(mean_solar, xlab="Time", ylab="Consumption in Quadrillion BTUs", main="Combined Models/Forecasts")
+lines(naive_solar$mean,col="red")
+lines(rwf_solar$mean,col="green")
+lines(snaive_solar$mean,col="yellow")
+lines(MA5_solar,col="blue")
+lines(forecast_ets_solar$mean, col="orange")
+lines(forecast_HW_solar$mean, col="purple")
+lines(seasadj(stl_decomp_solar),col="pink")
+```
+
+### ARIMA
+```{r}
+# ARIMA
+nsdiffs(Solar_Window_ts) # The time series needs 1 level of seasonal differencing. 
+ndiffs(Solar_Window_ts) # The time series also needs 1 level of normal differencing.
+ndiffs((diff(Solar_Window_ts,12))) # This confirms that even after seasonal differencing, one regular difference is also needed.
+ndiffs(diff(diff(Solar_Window_ts,12))) # No more differencing is needed, so the time series is stationary.
+plot(diff(diff(Solar_Window_ts,12)))
+Acf(diff(diff(Solar_Window_ts,12))) # The Acf plot has significant spikes at lags 12 and 24, which means there is a sign of a seasonal moving-average (MA) component (Q). 
+Pacf(diff(diff(Solar_Window_ts,12))) # The Pacf plot shows a significant spike at lag 1, suggesting a low-order AR (auto regressive) component (p). The spikes at lag 12 or lag 24 are significant but not much different, which means that the model may have no seasonal AR (P). 
+tsdisplay(diff(diff(Solar_Window_ts,12)))
+fit_solar <- auto.arima(Solar_Window_ts,trace=TRUE, stepwise = FALSE, seasonal=TRUE) 
+# ARIMA(2,1,2)(0,1,1) is the best model, as it has the lowest BIC value at -1557.31. It has 7 total components. 
+# The non-seasonal component is (2,1,2): two auto regressive (AR) terms, one non-seasonal differencing, and two moving average (MA) terms. The two AR terns mean that the past two observations help predict the next one, and the two MA terms means that the past two forecast errors influence the prediction.
+# The seasonal component is (0,1,1): no seasonal AR terms (Pacf did not show different seasonal spikes at lags 12 and 24), one seasonal differencing (also confirmed by nsdiffs output), and one seasonal MA term (which aligns with the seasonal spikes in the ACF). 
+fit_solar 
+plot(Solar_Window_ts)
+lines(fit_solar$fitted, col='red')
+# ARIMA forecast for the next five years
+seasonal_arima_forecast_solar <- forecast(fit_solar, h=24)
+# The forecast seems to follow the slight upward trend in solar energy consumption, and it accounts for the seasonal fluctuations well. The uncertainty grows as the forecast extends further into the future, as indicated by the growing shaded regions.
+plot(seasonal_arima_forecast_solar, main="ARIMA(2,1,2)(0,1,1) Forecast", ylab="Solar Consumption in Quadrillion BTUs", xlab="Time")
+accuracy(seasonal_arima_forecast_solar) # The MAPE indicates that the ARIMA forecast is off by about 3.70%. The RMSE indicates that the average difference between predicted and actual values from the ARIMA forecast is about 0.00199 quadrillion BTUs.
+
+# Residual Analysis for ARIMA
+# Acf Plot of Residuals for ARIMA
+# The Acf plot of residuals shows that there are only two significant lag (1 and 10). There is no clear wave-like pattern or decreasing/increasing trend (it is pretty random), and there are no significant spikes in either lag 12 or 24, which mean that ARIMA is doing a good job at capturing seasonality and trend. 
+Acf(fit_solar$residuals)
+# Residuals Plot for ARIMA
+# The residuals plot from ARIMA shows that residual values have much more variation in recent years compared to residuals from 2010 to 2015. This is a positive sign that the ARIMA model and forecast are working well for this time series because fluctuating and spread out residuals means that the model is not predominantly under- or over-estimating solar energy consumption.
+plot.ts(residuals(fit_solar), main="Residuals from ARIMA Fit")
+# Histogram of Residuals for ARIMA
+# The histogram of residuals from the ARIMA model basically shows a normal distribution with no significant skewness. There are also no outliers in this histogram.
+hist(fit_solar$residuals)
+tsdiag(fit_solar)
+```
+
+### Accuracy Summary
+```{r}
+mean_solar_accuracy <- accuracy(mean_solar)
+naive_solar_accuracy <- accuracy(naive_solar)
+rwf_solar_accuracy <- accuracy(rwf_solar)
+snaive_solar_accuracy <- accuracy(snaive_solar)
+ets_solar_accuracy <- accuracy(forecast_ets_solar)
+HW_solar_accuracy <- accuracy(forecast_HW_solar)
+ARIMA_solar_accuracy <- accuracy(seasonal_arima_forecast_solar)
+all_solar_accuracy <- data.frame(
+  Model = c("Mean", "Naive", "Random Walk", "Seasonal Naive", "ETS", "Holt-Winters", "ARIMA"), 
+  ME = c(mean_solar_accuracy[1], naive_solar_accuracy[1], rwf_solar_accuracy[1], snaive_solar_accuracy[1], ets_solar_accuracy[1], HW_solar_accuracy[1], ARIMA_solar_accuracy[1]),
+  RMSE = c(mean_solar_accuracy[2], naive_solar_accuracy[2], rwf_solar_accuracy[2], snaive_solar_accuracy[2], ets_solar_accuracy[2], HW_solar_accuracy[2], ARIMA_solar_accuracy[2]),
+  MAE = c(mean_solar_accuracy[3], naive_solar_accuracy[3], rwf_solar_accuracy[3], snaive_solar_accuracy[3], ets_solar_accuracy[3], HW_solar_accuracy[3], ARIMA_solar_accuracy[3]),
+  MPE = c(mean_solar_accuracy[4], naive_solar_accuracy[4], rwf_solar_accuracy[4], snaive_solar_accuracy[4], ets_solar_accuracy[4], HW_solar_accuracy[4], ARIMA_solar_accuracy[4]),
+  MAPE = c(mean_solar_accuracy[5], naive_solar_accuracy[5], rwf_solar_accuracy[5], snaive_solar_accuracy[5], ets_solar_accuracy[5], HW_solar_accuracy[5], ARIMA_solar_accuracy[5]),
+  MASE = c(mean_solar_accuracy[6], naive_solar_accuracy[6], rwf_solar_accuracy[6], snaive_solar_accuracy[6], ets_solar_accuracy[6], HW_solar_accuracy[6], ARIMA_solar_accuracy[6])
+)
+all_solar_accuracy
+# The best model for the solar energy consumption time series seems to be Exponential Smoothing using ETS, though ARIMA is also very good. The MAPE (mean absolute percent error) and RMSE (root mean square error) are lowest for ETS, as they are 3.526995 and 0.001821477 respectively. The ETS MAPE means that the forecast is only off by about 3.53% and the average difference between predicted and actual values is about 0.0018 quadrillion BTUs. The worst forecasts to use based off MAPE and RMSE methods are mean and seasonal naive.  
+```
+
+### Conclusion
+#### Overall, solar energy consumption in the United Staes remained pretty low up until around 2015 when an upward trend began. From 2015 onward, there have been strong and consistent seasonal patterns in solar energy consumption, specifically spikes in the summer seasons of May, June, and July and dips in the winter seasons of December and January. Using ETS for forecasting, there is no strong correlation among the residuals, indicating that the model fits well and does not predominantly over- or under-estimate solar energy consumption. In the next few years, I expect the time series to follow to upward trend and increase slightly but more importantly have defined seasonal patterns. 
